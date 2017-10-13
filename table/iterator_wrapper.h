@@ -14,6 +14,9 @@ namespace leveldb {
 // caches the valid() and key() results for an underlying iterator.
 // This can help avoid virtual function calls and also gives better
 // cache locality.
+// IteratorWrapper 只是在Interator外面包了薄薄的一层
+// 所有的操作只是调用其成员iter的对应方法，然后update，
+// 作用是啥目前没有看出来
 class IteratorWrapper {
  public:
   IteratorWrapper(): iter_(NULL), valid_(false) { }

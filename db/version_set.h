@@ -175,10 +175,16 @@ class VersionSet {
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
+	// 主要干三件事
+	// 1，通过builder，根据当前的version+edit来生成一个新的version
+	// 2，把edit作为一个delt，encode到manifest文件中
+	// 3，把新的version放到双链表中，并将current设置为此version
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
   // Recover the last saved descriptor from persistent storage.
+	// 打开manifest文件，并逐条读取record，decode到edit中，然后通过build解析到当前
+	// versionset，可以认为一个versionset可以通过这个函数，从一个文件中重建起来
   Status Recover(bool *save_manifest);
 
   // Return the current version.
@@ -248,6 +254,8 @@ class VersionSet {
   Iterator* MakeInputIterator(Compaction* c);
 
   // Returns true iff some level needs a compaction.
+	// 从这里可以看出，触发compaction的两个条件，一个是当前version的score>=1,或者
+	// 有需要compact的file，需要看哪里改变的这两个值
   bool NeedsCompaction() const {
     Version* v = current_;
     return (v->compaction_score_ >= 1) || (v->file_to_compact_ != NULL);
@@ -275,7 +283,10 @@ class VersionSet {
   friend class Version;
 
   bool ReuseManifest(const std::string& dscname, const std::string& dscbase);
-
+  // 为v设置 compaction_score
+	// compaction_score 是各个level中score的最大值
+	// 其中level0是通过文件数作为score的因素
+	// level1+是通过所有文件的总大小作为score的因素
   void Finalize(Version* v);
 
   void GetRange(const std::vector<FileMetaData*>& inputs,
@@ -294,25 +305,27 @@ class VersionSet {
 
   void AppendVersion(Version* v);
 
-  Env* const env_;
+  Env* const env_; // 与系统相关的基础操作封装，比如创建文件，写文件
   const std::string dbname_;
   const Options* const options_;
-  TableCache* const table_cache_;
+  TableCache* const table_cache_;//读取sst文件中内容时，其实都是从cache读
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
-  uint64_t manifest_file_number_;
-  uint64_t last_sequence_;
-  uint64_t log_number_;
+  uint64_t next_file_number_;// 下一个sst文件将使用的num，leveldb中的sst文件都以数字为文件名
+  uint64_t manifest_file_number_;//manifest文件也会产生新文件，同样以数字为文件名，什么时候更新？
+  uint64_t last_sequence_;//seq用来和user key共同组成internal key
+  uint64_t log_number_;//
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily
-  WritableFile* descriptor_file_;
+  WritableFile* descriptor_file_; // 对应着manifest文件
   log::Writer* descriptor_log_;
-  Version dummy_versions_;  // Head of circular doubly-linked list of versions.
-  Version* current_;        // == dummy_versions_.prev_
+  Version dummy_versions_;  // Head of circular doubly-linked list of versions.双链表的头
+  Version* current_;        // == dummy_versions_.prev_ current位于双链表的末尾
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+	// Compaction为什么需要用key来标识？不应该以文件来标识吗，在version中有成员变
+	// 量指示当前待合并的文件名，为何不是直接将此文件合并
   std::string compact_pointer_[config::kNumLevels];
 
   // No copying allowed

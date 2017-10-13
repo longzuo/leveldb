@@ -1263,7 +1263,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
   return status;
 }
-
+//把 writes中各个writer的writeBatch合并起来，成为一个writeBatch，并且，让
+//lastwriter指向最后一个writer
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-NULL batch
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {

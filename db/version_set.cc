@@ -120,7 +120,7 @@ static bool BeforeFile(const Comparator* ucmp,
 
 bool SomeFileOverlapsRange(
     const InternalKeyComparator& icmp,
-    bool disjoint_sorted_files,
+    bool disjoint_sorted_files,// file是否为排序好的, 比如level0是false，level1+是true
     const std::vector<FileMetaData*>& files,
     const Slice* smallest_user_key,
     const Slice* largest_user_key) {
@@ -328,7 +328,15 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
     }
   }
 }
-
+/* 从Version中获取某个key的value
+ * 分两个步骤完成
+ * 1，从version中的levle中顺次找file
+ *    先在level0中找，因为level0中各个文件的key可能重复，所以可能找到多个文件中
+ *    包含此key，如果有多个，需要将这些文件按照序号排序，再传给下一步，这样可以
+ *    方便下一步按照序号来找key，找到了，不用继续在剩余文件中找。
+ *    如果level0中没有找到，则继续向下层找，下面level中最多有一个文件包含此key
+ * 2，从file中找对应key的value，这一步是通过在tablecache中查询来完成的
+ * */
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     std::string* value,
@@ -427,7 +435,13 @@ Status Version::Get(const ReadOptions& options,
 
   return Status::NotFound(Slice());  // Use an empty error message for speed
 }
-
+/*
+ * GetStats中保存了get之后的状态，get的第一步是在各个level中找file，
+ * GetStats中保存了最后一个搜索的file和level信息
+ * 下面这个函数根据这些信息，来更新version的file_to_compact 和
+ * file_to_compact_level，
+ * 每个file有一个allow seek参数，如果太小了，就要将这个文件compact??
+ * */
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
   if (f != NULL) {
@@ -804,8 +818,8 @@ void VersionSet::AppendVersion(Version* v) {
   // Make "v" current
   assert(v->refs_ == 0);
   assert(v != current_);
-  if (current_ != NULL) {
-    current_->Unref();
+  if (current_ != NULL) {// ref的典型用法，当一个指针指向目标时，调用目标的ref函数
+    current_->Unref();// 当一个指针换指向之前，先unref
   }
   current_ = v;
   v->Ref();
